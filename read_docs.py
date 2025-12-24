@@ -1,6 +1,7 @@
 import os
 import sys
 import re
+import time
 import subprocess
 import platform
 from langchain_ollama import OllamaLLM
@@ -15,6 +16,7 @@ TOP_K_DOCS = 3
 
 # --- CHEAT SHEET (PRIORITY RULES) ---
 PRIORITY_RULES = {
+    # Network & Hardware
     "ip": "network_map.md",
     "address": "network_map.md",
     "subnet": "network_map.md",
@@ -30,6 +32,17 @@ PRIORITY_RULES = {
     "proxmox": "network_map.md",
     "hardware": "infrastructure_manifest.md",
     "specs": "infrastructure_manifest.md",
+    
+    # Guides & Preferences
+    "command": "cheat_sheet.md",
+    "how to": "cheat_sheet.md",
+    "preference": "preferences.md",
+    "style": "preferences.md",
+    
+    # Logging (The Fix!)
+    "log": "troubleshooting_log.md",
+    "note": "troubleshooting_log.md",
+    "record": "troubleshooting_log.md",
 }
 
 # --- TOOLS REGISTRY ---
@@ -61,9 +74,27 @@ def run_system_check(arg=None):
     except Exception as e:
         return f"Check failed: {e}"
 
+def log_note(note_text):
+    """Appends a note to the troubleshooting log."""
+    log_path = os.path.expanduser("~/projects/infrastructure/troubleshooting_log.md")
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Clean up the note text (remove quotes if the AI added them)
+    clean_note = note_text.strip('"').strip("'")
+    
+    entry = f"\n- **[{timestamp}]** {clean_note}"
+    
+    try:
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(entry)
+        return f"SUCCESS: Logged to {os.path.basename(log_path)}"
+    except Exception as e:
+        return f"Log failed: {e}"
+
 AVAILABLE_TOOLS = {
     "ping": run_ping,
-    "check_server": run_system_check
+    "check_server": run_system_check,
+    "log": log_note
 }
 
 # --- RAG ENGINE ---
@@ -73,7 +104,7 @@ def get_relevant_context(query):
     for folder in DOC_DIRS:
         if os.path.exists(folder):
             for root, dirs, files in os.walk(folder):
-                for file in files:  # <--- This was the missing loop!
+                for file in files:
                     if file.endswith(".md"):
                         all_md_files.append(os.path.join(root, file))
 
@@ -120,7 +151,7 @@ def get_relevant_context(query):
 
 # --- MAIN APP ---
 def main():
-    print(f"🚀 Lab Assistant RAG + Multi-Tools (Model: {MODEL_NAME})")
+    print(f"🚀 Lab Assistant RAG + Tools + Logger (Model: {MODEL_NAME})")
     llm = OllamaLLM(model=MODEL_NAME)
     history = ""
 
@@ -131,16 +162,17 @@ def main():
         context_data = get_relevant_context(user_input)
 
         system_prompt = (
-            "You are a Lab Assistant. You can run diagnostics tools.\n"
+            "You are a Lab Assistant. You can run diagnostics tools and log notes.\n"
             "TOOLS AVAILABLE:\n"
             "- ping <ip_address>: Check if a device is online.\n"
             "- check_server: Check local server uptime.\n"
+            "- log <text>: Append a note to the troubleshooting log.\n"
             "\n"
             "INSTRUCTIONS:\n"
-            "1. To use a tool, output: [TOOL: ping 192.168.1.1]\n"
-            "2. DO NOT use placeholder text like 'argument'. Use REAL IP addresses from the Context.\n"
-            "3. If multiple IPs match the question (e.g. two Pi-holes), RUN THE TOOL FOR BOTH.\n"
-            "4. Wait for the Tool Output before saying 'It is online'. Do not guess.\n"
+            "1. To use a tool, output: [TOOL: tool_name argument]\n"
+            "2. DO NOT use placeholder text like 'argument'. Use REAL IP addresses.\n"
+            "3. If multiple IPs match, RUN THE TOOL FOR BOTH.\n"
+            "4. If the user asks to save/log something, use the log tool.\n"
             "\n"
             f"--- CONTEXT ---\n{context_data}\n"
             f"--- HISTORY ---\n{history}\n"
@@ -172,7 +204,7 @@ def main():
                 f"{full_prompt}\n{full_response}\n"
                 f"--- TOOL RESULTS ---\n{tool_outputs}\n"
                 "--- INSTRUCTION ---\n"
-                "Summarize the results above. Which devices are UP and which are DOWN?"
+                "Summarize the results above. If you logged something, confirm it."
             )
             final_answer = llm.invoke(follow_up_prompt)
             print(f"\nFinal Answer: {final_answer}")
