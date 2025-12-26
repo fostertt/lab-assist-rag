@@ -7,9 +7,9 @@ import platform
 from langchain_ollama import OllamaLLM
 
 # --- CONFIGURATION ---
+# Pointing to the parent _context folder lets it find infrastructure/ planning/ etc. recursively.
 DOC_DIRS = [
-    os.path.expanduser("~/projects/infrastructure"),
-    os.path.expanduser("~/projects/planning")
+    os.path.expanduser("~/projects/_context"),
 ]
 MODEL_NAME = "llama3.1:8b"
 TOP_K_DOCS = 3
